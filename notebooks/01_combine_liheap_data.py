@@ -1,7 +1,6 @@
 import pandas as pd
 from pathlib import Path
 import re
-import pgeocode  # <--- NEW
 import numpy as np
 
 # Set random seed for reproducibility
@@ -198,38 +197,51 @@ still_missing_mask = (
 
 print(f"Rows with missing City AFTER internal mapping: {still_missing_mask.sum()}")
 
-# Try to initialize pgeocode with error handling
-try:
-    nomi = pgeocode.Nominatim("us")
-    pgeocode_available = True
-except Exception as e:
-    print(f"Warning: pgeocode initialization failed: {e}")
-    print("Will skip pgeocode lookup")
-    pgeocode_available = False
+# Load local GeoNames data (no HTTP required!)
+geonames_file = script_dir / "data_geonames" / "US.txt"
+geonames_zip_city = {}
+
+if geonames_file.exists():
+    print("Loading GeoNames data from local file...")
+    try:
+        # GeoNames format: country, postal_code, place_name, admin_name1, admin_code1, ...
+        df_geo = pd.read_csv(
+            geonames_file,
+            sep="\t",
+            header=None,
+            names=["country", "postal_code", "place_name", "admin_name1", "admin_code1",
+                   "admin_name2", "admin_code2", "admin_name3", "admin_code3",
+                   "latitude", "longitude", "accuracy"],
+            dtype={"postal_code": str},
+            usecols=["postal_code", "place_name"]
+        )
+        # Create ZIP → City mapping (take first occurrence for each ZIP)
+        geonames_zip_city = (
+            df_geo.dropna(subset=["postal_code", "place_name"])
+            .groupby("postal_code")["place_name"]
+            .first()
+            .str.upper()
+            .to_dict()
+        )
+        print(f"Loaded {len(geonames_zip_city)} ZIP codes from GeoNames")
+    except Exception as e:
+        print(f"Warning: Failed to load GeoNames data: {e}")
+else:
+    print(f"Warning: GeoNames file not found at {geonames_file}")
 
 def lookup_city(zip_code: str):
-    if not pgeocode_available:
-        return None
     if pd.isna(zip_code):
         return None
-    try:
-        rec = nomi.query_postal_code(zip_code)
-        # rec.place_name có thể là 'SAN DIEGO' hoặc 'SAN DIEGO,CHULA VISTA,...'
-        if isinstance(rec, pd.Series) and pd.notna(rec.place_name):
-            # lấy city đầu tiên trước dấu phẩy nếu có
-            city = str(rec.place_name).split(",")[0]
-            return city.strip().upper()
-    except Exception as e:
-        # Silently skip errors for individual lookups
-        pass
-    return None
+    # Clean ZIP code (remove leading zeros if any, then pad to 5 digits)
+    zip_clean = str(zip_code).zfill(5)
+    return geonames_zip_city.get(zip_clean)
 
-if pgeocode_available:
+if geonames_zip_city:
     df_all.loc[still_missing_mask, "City"] = (
         df_all.loc[still_missing_mask, "Zip_Code"].apply(lookup_city)
     )
 
-print(f"Rows with missing City AFTER pgeocode: {df_all['City'].isna().sum()}")
+print(f"Rows with missing City AFTER GeoNames lookup: {df_all['City'].isna().sum()}")
 
 df_all["City"] = df_all["City"].astype(str).str.strip().str.upper()
 
