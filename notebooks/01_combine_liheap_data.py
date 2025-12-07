@@ -198,22 +198,36 @@ still_missing_mask = (
 
 print(f"Rows with missing City AFTER internal mapping: {still_missing_mask.sum()}")
 
-nomi = pgeocode.Nominatim("us")
+# Try to initialize pgeocode with error handling
+try:
+    nomi = pgeocode.Nominatim("us")
+    pgeocode_available = True
+except Exception as e:
+    print(f"Warning: pgeocode initialization failed: {e}")
+    print("Will skip pgeocode lookup")
+    pgeocode_available = False
 
 def lookup_city(zip_code: str):
+    if not pgeocode_available:
+        return None
     if pd.isna(zip_code):
         return None
-    rec = nomi.query_postal_code(zip_code)
-    # rec.place_name có thể là 'SAN DIEGO' hoặc 'SAN DIEGO,CHULA VISTA,...'
-    if isinstance(rec, pd.Series) and pd.notna(rec.place_name):
-        # lấy city đầu tiên trước dấu phẩy nếu có
-        city = str(rec.place_name).split(",")[0]
-        return city.strip().upper()
+    try:
+        rec = nomi.query_postal_code(zip_code)
+        # rec.place_name có thể là 'SAN DIEGO' hoặc 'SAN DIEGO,CHULA VISTA,...'
+        if isinstance(rec, pd.Series) and pd.notna(rec.place_name):
+            # lấy city đầu tiên trước dấu phẩy nếu có
+            city = str(rec.place_name).split(",")[0]
+            return city.strip().upper()
+    except Exception as e:
+        # Silently skip errors for individual lookups
+        pass
     return None
 
-df_all.loc[still_missing_mask, "City"] = (
-    df_all.loc[still_missing_mask, "Zip_Code"].apply(lookup_city)
-)
+if pgeocode_available:
+    df_all.loc[still_missing_mask, "City"] = (
+        df_all.loc[still_missing_mask, "Zip_Code"].apply(lookup_city)
+    )
 
 print(f"Rows with missing City AFTER pgeocode: {df_all['City'].isna().sum()}")
 
