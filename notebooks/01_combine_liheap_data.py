@@ -197,42 +197,81 @@ still_missing_mask = (
 
 print(f"Rows with missing City AFTER internal mapping: {still_missing_mask.sum()}")
 
-# Load local GeoNames data (no HTTP required!)
-geonames_file = script_dir / "data_geonames" / "US.txt"
+# Strategy: Try HTTP first (latest data), fallback to local if fails
 geonames_zip_city = {}
+geonames_file = script_dir / "data_geonames" / "US.txt"
 
-if geonames_file.exists():
-    print("Loading GeoNames data from local file...")
-    try:
-        # GeoNames format: country, postal_code, place_name, admin_name1, admin_code1, ...
-        df_geo = pd.read_csv(
-            geonames_file,
-            sep="\t",
-            header=None,
-            names=["country", "postal_code", "place_name", "admin_name1", "admin_code1",
-                   "admin_name2", "admin_code2", "admin_name3", "admin_code3",
-                   "latitude", "longitude", "accuracy"],
-            dtype={"postal_code": str},
-            usecols=["postal_code", "place_name"]
-        )
-        # Create ZIP → City mapping (take first occurrence for each ZIP)
-        geonames_zip_city = (
-            df_geo.dropna(subset=["postal_code", "place_name"])
-            .groupby("postal_code")["place_name"]
-            .first()
-            .str.upper()
-            .to_dict()
-        )
-        print(f"Loaded {len(geonames_zip_city)} ZIP codes from GeoNames")
-    except Exception as e:
-        print(f"Warning: Failed to load GeoNames data: {e}")
-else:
-    print(f"Warning: GeoNames file not found at {geonames_file}")
+# Try loading from HTTP first (latest data)
+print("Attempting to load GeoNames data from HTTP...")
+try:
+    import urllib.request
+    import zipfile
+    import io
+    
+    # Download and extract in memory
+    url = "https://download.geonames.org/export/zip/US.zip"
+    print(f"Downloading from {url}...")
+    
+    with urllib.request.urlopen(url, timeout=10) as response:
+        zip_data = response.read()
+    
+    # Extract US.txt from zip
+    with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+        with zf.open("US.txt") as txt_file:
+            df_geo = pd.read_csv(
+                txt_file,
+                sep="\t",
+                header=None,
+                names=["country", "postal_code", "place_name", "admin_name1", "admin_code1",
+                       "admin_name2", "admin_code2", "admin_name3", "admin_code3",
+                       "latitude", "longitude", "accuracy"],
+                dtype={"postal_code": str},
+                usecols=["postal_code", "place_name"]
+            )
+            # Create ZIP → City mapping
+            geonames_zip_city = (
+                df_geo.dropna(subset=["postal_code", "place_name"])
+                .groupby("postal_code")["place_name"]
+                .first()
+                .str.upper()
+                .to_dict()
+            )
+    print(f"✅ Loaded {len(geonames_zip_city)} ZIP codes from HTTP (latest data)")
+
+except Exception as e:
+    print(f"⚠️ HTTP failed: {e}")
+    print("Falling back to local GeoNames data...")
+    
+    # Fallback to local file
+    if geonames_file.exists():
+        try:
+            df_geo = pd.read_csv(
+                geonames_file,
+                sep="\t",
+                header=None,
+                names=["country", "postal_code", "place_name", "admin_name1", "admin_code1",
+                       "admin_name2", "admin_code2", "admin_name3", "admin_code3",
+                       "latitude", "longitude", "accuracy"],
+                dtype={"postal_code": str},
+                usecols=["postal_code", "place_name"]
+            )
+            geonames_zip_city = (
+                df_geo.dropna(subset=["postal_code", "place_name"])
+                .groupby("postal_code")["place_name"]
+                .first()
+                .str.upper()
+                .to_dict()
+            )
+            print(f"✅ Loaded {len(geonames_zip_city)} ZIP codes from local file")
+        except Exception as e2:
+            print(f"❌ Local file also failed: {e2}")
+    else:
+        print(f"❌ Local file not found at {geonames_file}")
 
 def lookup_city(zip_code: str):
     if pd.isna(zip_code):
         return None
-    # Clean ZIP code (remove leading zeros if any, then pad to 5 digits)
+    # Clean ZIP code (pad to 5 digits)
     zip_clean = str(zip_code).zfill(5)
     return geonames_zip_city.get(zip_clean)
 
@@ -240,6 +279,8 @@ if geonames_zip_city:
     df_all.loc[still_missing_mask, "City"] = (
         df_all.loc[still_missing_mask, "Zip_Code"].apply(lookup_city)
     )
+else:
+    print("⚠️ No GeoNames data available - skipping city lookup")
 
 print(f"Rows with missing City AFTER GeoNames lookup: {df_all['City'].isna().sum()}")
 
