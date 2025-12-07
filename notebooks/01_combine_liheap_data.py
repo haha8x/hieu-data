@@ -16,6 +16,10 @@ data_folder = script_dir / "Data_raw_SDGE LIHEAP"
 combined_output = script_dir / "data_clean" / "combined_raw_liheap_2023_2025.xlsx"
 final_output = script_dir / "data_clean" / "liheap_clean_2023_2025.xlsx"
 
+# GeoNames country code (US, CA, GB, DE, FR, VN, etc.)
+# See: https://download.geonames.org/export/zip/
+GEONAMES_COUNTRY = "US"
+
 # ========== 2. HELPER FUNCTIONS ==========
 
 def detect_header_row(file_path: Path, max_rows: int = 10) -> int:
@@ -200,25 +204,25 @@ print(f"Rows with missing City AFTER internal mapping: {still_missing_mask.sum()
 
 # Strategy: Try HTTP first (latest data), fallback to local if fails
 geonames_zip_city = {}
-geonames_file = script_dir / "data_geonames" / "US.txt"
+geonames_file = script_dir / "data_geonames" / f"{GEONAMES_COUNTRY}.txt"
 
 # Try loading from HTTP first (latest data)
-print("Attempting to load GeoNames data from HTTP...")
+print(f"Attempting to load GeoNames data for {GEONAMES_COUNTRY} from HTTP...")
 try:
     import urllib.request
     import zipfile
     import io
     
     # Download and extract in memory
-    url = "https://download.geonames.org/export/zip/US.zip"
+    url = f"https://download.geonames.org/export/zip/{GEONAMES_COUNTRY}.zip"
     print(f"Downloading from {url}...")
     
     with urllib.request.urlopen(url, timeout=10) as response:
         zip_data = response.read()
     
-    # Extract US.txt from zip
+    # Extract {COUNTRY}.txt from zip
     with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
-        with zf.open("US.txt") as txt_file:
+        with zf.open(f"{GEONAMES_COUNTRY}.txt") as txt_file:
             df_geo = pd.read_csv(
                 txt_file,
                 sep="\t",
