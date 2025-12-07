@@ -37,11 +37,6 @@ env/
 .DS_Store
 Thumbs.db
 
-# Data files (exclude raw data from git)
-Data_raw_SDGE LIHEAP/
-data_clean/*.xlsx
-ouputs/
-
 # Cache
 .cache/
 *.log
