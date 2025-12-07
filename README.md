@@ -11,9 +11,11 @@ Project này xử lý dữ liệu LIHEAP từ nhiều file Excel, chuẩn hóa, 
 - ✅ Tự động phát hiện header row trong Excel files
 - ✅ Chuẩn hóa tên cột từ nhiều format khác nhau
 - ✅ Làm sạch ZIP code, dates, và pledge amounts
-- ✅ Tự động điền City từ ZIP code (sử dụng pgeocode)
+- ✅ **Smart GeoNames loading**: HTTP first (latest data), local fallback nếu offline
+- ✅ Tự động điền City từ ZIP code (41,487 US ZIP codes)
 - ✅ Filter theo time range (2023-01 đến 2025-06)
 - ✅ **Reproducible** - kết quả giống nhau trên mọi máy
+- ✅ **No external dependencies** - works offline với local data
 
 ## 🔧 Cài đặt
 
@@ -96,8 +98,11 @@ Xem chi tiết trong [SOLUTION.md](SOLUTION.md) về cách fix vấn đề kết
 
 - `pandas==2.2.3` - Data processing
 - `openpyxl==3.1.2` - Excel file handling
-- `pgeocode==0.4.0` - ZIP code to city lookup
 - `numpy==2.1.3` - Numerical operations
+
+**No external API dependencies!** ZIP code lookups use:
+- GeoNames HTTP (latest data) with automatic fallback to
+- Local GeoNames database (included in repo, 41K ZIP codes)
 
 ## 🤝 Contributing
 
