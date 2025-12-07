@@ -123,8 +123,9 @@ combined_output.parent.mkdir(parents=True, exist_ok=True)
 df_all.to_excel(combined_output, index=False)
 print(f"Combined normalized file saved to: {combined_output}")
 
-# ========== 5. CLEAN ZIP / DATE / PLEDGE AMOUNT ==========
+# ========== 5. CLEAN ZIP / DATE / PLEDGE AMOUNT FIRST (BEFORE MAPPING) ==========
 
+# Clean ZIP codes FIRST - this is critical for mapping to work!
 df_all["Zip_Code"] = (
     df_all["Zip_Code"]
         .astype(str)
@@ -154,7 +155,7 @@ df_all["Pledge_Amount"] = (
 )
 df_all["Pledge_Amount"] = pd.to_numeric(df_all["Pledge_Amount"], errors="coerce")
 
-# ========== 6. BUILD ZIP → CITY FROM EXISTING DATA ==========
+# ========== 6. BUILD ZIP → CITY FROM EXISTING DATA (AFTER CLEANING) ==========
 
 city_series = df_all["City"].astype(str)
 missing_city_mask = (
